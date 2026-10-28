@@ -130,11 +130,17 @@ static std::vector<Stuck> computeStuck(const std::array<int, 101>& d, int wins) 
 }
 
 class DeathLab : public Popup {
+protected:
+    GJGameLevel* m_dlLvl = nullptr;
+    std::array<int, 101> m_dlD{};
+    int m_dlWins = 0;
+    std::array<int, 8> m_dlModes{};
+
 public:
     static DeathLab* create(GJGameLevel* lvl, const std::array<int, 101>& d, int wins,
-                            const std::array<int, 8>& modes) {
+                            const std::array<int, 8>& modes, bool fast = false) {
         auto ret = new DeathLab();
-        if (ret->init(lvl, d, wins, modes)) {
+        if (ret->init(lvl, d, wins, modes, fast)) {
             ret->autorelease();
             return ret;
         }
@@ -142,23 +148,41 @@ public:
         return nullptr;
     }
 
+    void onSkip(CCObject*) {
+        auto lvl = m_dlLvl;
+        auto d = m_dlD;
+        int wins = m_dlWins;
+        auto modes = m_dlModes;
+        this->onClose(nullptr);
+        if (auto p = DeathLab::create(lvl, d, wins, modes, true)) p->show();
+    }
+
 protected:
     bool init(GJGameLevel* lvl, const std::array<int, 101>& d, int wins,
-              const std::array<int, 8>& modes) {
+              const std::array<int, 8>& modes, bool fast) {
         if (!Popup::init(440.f, 270.f)) return false;
+        m_dlLvl = lvl;
+        m_dlD = d;
+        m_dlWins = wins;
+        m_dlModes = modes;
         if (m_bgSprite) m_bgSprite->setVisible(false);
         auto sz = m_mainLayer->getContentSize();
         float w = sz.width > 0.f ? sz.width : 440.f;
         float h = sz.height > 0.f ? sz.height : 270.f;
         const ccColor3B CYAN = {120, 255, 255};
+        const ccColor3B GREEN = {90, 255, 140};
         const ccColor3B SOFT = {200, 220, 230};
-        const float T0 = 0.55f;
+        const float BOOT = fast ? 0.f : 10.f;
+        const float BUILD = fast ? 0.8f : 5.f;
+        auto at = [&](float f) { return BOOT + f * BUILD; };
+        auto soft = [](ccColor4F c, float a) { c.a = a; return c; };
 
+        // background panel, visible from the start
         auto panel = CCDrawNode::create();
-        fillRect(panel, 0, 0, w, h, {0.02f, 0.05f, 0.1f, 0.97f}, 2.f, {0.2f, 0.9f, 1.f, 1.f});
+        fillRect(panel, 0.f, 0.f, w, h, {0.02f, 0.05f, 0.1f, 0.94f}, 2.f, {0.2f, 0.9f, 1.f, 0.8f});
         for (float y = 10.f; y < h; y += 20.f)
-            panel->drawSegment({10.f, y}, {w - 10.f, y}, 0.5f, {0.2f, 0.8f, 1.f, 0.06f});
-        ccColor4F neon = {0.4f, 1.f, 1.f, 1.f};
+            panel->drawSegment({10.f, y}, {w - 10.f, y}, 0.5f, {0.2f, 0.8f, 1.f, 0.035f});
+        ccColor4F neon = {0.4f, 1.f, 1.f, 0.7f};
         panel->drawSegment({4.f, 4.f}, {24.f, 4.f}, 2.f, neon);
         panel->drawSegment({4.f, 4.f}, {4.f, 24.f}, 2.f, neon);
         panel->drawSegment({w - 4.f, 4.f}, {w - 24.f, 4.f}, 2.f, neon);
@@ -167,13 +191,22 @@ protected:
         panel->drawSegment({4.f, h - 4.f}, {4.f, h - 24.f}, 2.f, neon);
         panel->drawSegment({w - 4.f, h - 4.f}, {w - 24.f, h - 4.f}, 2.f, neon);
         panel->drawSegment({w - 4.f, h - 4.f}, {w - 4.f, h - 24.f}, 2.f, neon);
-        panel->drawSegment({10.f, h - 36.f}, {w - 10.f, h - 36.f}, 1.f, {0.3f, 0.9f, 1.f, 0.5f});
-        panel->drawSegment({255.f, 96.f}, {255.f, h - 40.f}, 1.f, {0.3f, 0.9f, 1.f, 0.3f});
-        panel->drawSegment({10.f, 90.f}, {w - 10.f, 90.f}, 1.f, {0.3f, 0.9f, 1.f, 0.5f});
         m_mainLayer->addChild(panel, -1);
 
+        // decorations that appear when the boot ends
+        auto deco = CCDrawNode::create();
+        fillRect(deco, 2.f, h - 24.f, w - 2.f, h - 2.f, {0.06f, 0.14f, 0.2f, 0.85f}, 0.f, {0.f, 0.f, 0.f, 0.f});
+        deco->drawDot({14.f, h - 13.f}, 3.f, {1.f, 0.35f, 0.35f, 0.8f});
+        deco->drawDot({26.f, h - 13.f}, 3.f, {1.f, 0.85f, 0.3f, 0.8f});
+        deco->drawDot({38.f, h - 13.f}, 3.f, {0.35f, 1.f, 0.5f, 0.8f});
+        deco->drawSegment({10.f, 96.f}, {w - 10.f, 96.f}, 1.f, {0.3f, 0.9f, 1.f, 0.25f});
+        deco->drawSegment({255.f, 100.f}, {255.f, h - 30.f}, 1.f, {0.3f, 0.9f, 1.f, 0.18f});
+        deco->setVisible(false);
+        deco->runAction(CCSequence::create(CCDelayTime::create(BOOT), CCShow::create(), nullptr));
+        m_mainLayer->addChild(deco, 0);
+
         auto label = [&](const std::string& t, const char* font, float sc, ccColor3B col,
-                         CCPoint pos, float ax, float delay) {
+                         CCPoint pos, float ax, float delay) -> CCLabelBMFont* {
             auto l = CCLabelBMFont::create(t.c_str(), font);
             l->setScale(sc);
             l->setColor(col);
@@ -182,6 +215,7 @@ protected:
             l->setOpacity(0);
             l->runAction(CCSequence::create(CCDelayTime::create(delay), CCFadeIn::create(0.25f), nullptr));
             m_mainLayer->addChild(l, 5);
+            return l;
         };
         auto hbar = [&](float x, float y, float len, float bh, ccColor4F c, float delay) {
             auto n = CCDrawNode::create();
@@ -202,49 +236,96 @@ protected:
             m_mainLayer->addChild(n, 4);
         };
 
-        // boot line
-        auto boot = CCLabelBMFont::create("> INITIALIZING DEATH ANALYZER_", FONT2);
-        boot->setColor({90, 255, 140});
-        boot->setPosition({w / 2.f, h / 2.f});
-        boot->setOpacity(0);
-        boot->runAction(CCSequence::create(CCFadeIn::create(0.15f), CCDelayTime::create(0.3f),
-            CCFadeOut::create(0.15f), CCRemoveSelf::create(), nullptr));
-        m_mainLayer->addChild(boot, 10);
+        // boot sequence
+        if (!fast) {
+            auto bootLayer = CCNode::create();
+            m_mainLayer->addChild(bootLayer, 20);
+            static const char* LINES[16] = {
+                "DEATHLAB BIOS v0.4  (c) cybernode",
+                "checking memory ............. OK",
+                "mounting /saves/death.db .... OK",
+                "reading level index ......... OK",
+                "loading stat engine ......... OK",
+                "calibrating hazard model .... OK",
+                "decrypting attempt logs ..... OK",
+                "linking gamemode sensors .... OK",
+                "scanning difficulty tiers ... OK",
+                "building survival curves .... OK",
+                "estimating pass chances ..... OK",
+                "spinning up neon core ....... OK",
+                "syncing scanline emitter .... OK",
+                "compiling heat map .......... OK",
+                "all systems nominal",
+                "launching analyzer_"};
+            for (int i = 0; i < 16; i++) {
+                auto l = CCLabelBMFont::create(LINES[i], FONT2);
+                l->setScale(0.75f);
+                l->setColor(i >= 14 ? ccColor3B{255, 255, 255} : ccColor3B{90, 255, 140});
+                l->setAnchorPoint({0.f, 0.5f});
+                l->setPosition({18.f, h - 18.f - 12.f * (float)i});
+                l->setOpacity(0);
+                l->runAction(CCSequence::create(CCDelayTime::create(0.3f + 0.58f * (float)i),
+                    CCFadeIn::create(0.1f), nullptr));
+                bootLayer->addChild(l);
+            }
+            auto back = CCDrawNode::create();
+            fillRect(back, 18.f, 12.f, w - 18.f, 18.f, {1.f, 1.f, 1.f, 0.1f}, 1.f, {0.4f, 1.f, 1.f, 0.5f});
+            bootLayer->addChild(back);
+            auto fill = CCDrawNode::create();
+            fillRect(fill, 0.f, 0.f, w - 36.f, 6.f, {0.4f, 1.f, 1.f, 0.7f}, 0.f, {0.f, 0.f, 0.f, 0.f});
+            fill->setPosition({18.f, 12.f});
+            fill->setScaleX(0.f);
+            fill->runAction(CCScaleTo::create(BOOT, 1.f, 1.f));
+            bootLayer->addChild(fill);
+            bootLayer->runAction(CCSequence::create(CCDelayTime::create(BOOT), CCRemoveSelf::create(), nullptr));
+
+            auto skipLbl = CCLabelBMFont::create("SKIP >>", FONT);
+            skipLbl->setScale(0.32f);
+            skipLbl->setColor({255, 255, 255});
+            auto skipItem = CCMenuItemSpriteExtra::create(skipLbl, this, menu_selector(DeathLab::onSkip));
+            skipItem->setPosition({w - 44.f, 30.f});
+            skipItem->runAction(CCSequence::create(CCDelayTime::create(BOOT), CCRemoveSelf::create(), nullptr));
+            m_buttonMenu->addChild(skipItem);
+        }
 
         // scan line
         auto scan = CCDrawNode::create();
-        scan->drawSegment({0.f, 0.f}, {w, 0.f}, 1.5f, {0.4f, 1.f, 1.f, 0.9f});
-        scan->runAction(CCSequence::create(CCDelayTime::create(0.2f),
-            CCMoveTo::create(0.8f, {0.f, h}), CCRemoveSelf::create(), nullptr));
+        scan->drawSegment({0.f, 0.f}, {w, 0.f}, 1.5f, {0.4f, 1.f, 1.f, 0.7f});
+        scan->runAction(CCSequence::create(CCDelayTime::create(BOOT),
+            CCMoveTo::create(std::max(BUILD, 0.3f), {0.f, h}), CCRemoveSelf::create(), nullptr));
         m_mainLayer->addChild(scan, 50);
 
-        // header
+        // title bar
         std::string name = std::string(lvl->m_levelName);
-        if (name.size() > 20) name = name.substr(0, 18) + "..";
+        if (name.size() > 18) name = name.substr(0, 16) + "..";
         auto tier = tierName(lvl);
-        label("DEATH ANALYZER", FONT, 0.5f, CYAN, {16.f, h - 20.f}, 0.f, T0);
-        label(fmt::format("{}  |  {}", name, tier), FONT2, 0.9f, SOFT, {w - 16.f, h - 20.f}, 1.f, T0);
+        auto tl = label("death-lab@console:~$ analyze --run", FONT2, 0.8f, GREEN, {50.f, h - 13.f}, 0.f, at(0.f));
+        auto cursor = label("_", FONT2, 0.8f, GREEN, {50.f + tl->getContentSize().width * 0.8f + 4.f, h - 13.f}, 0.f, at(0.f));
+        cursor->runAction(CCRepeatForever::create(CCSequence::create(
+            CCDelayTime::create(0.5f), CCFadeOut::create(0.01f), CCDelayTime::create(0.5f), CCFadeIn::create(0.01f), nullptr)));
+        label(fmt::format("{} [{}]", name, tier), FONT2, 0.8f, SOFT, {w - 14.f, h - 13.f}, 1.f, at(0.f));
 
         // stuck points
-        label("STUCK POINTS", FONT, 0.36f, CYAN, {16.f, h - 50.f}, 0.f, T0);
+        label("$ analyze --stuck", FONT2, 0.9f, GREEN, {16.f, h - 40.f}, 0.f, at(0.1f));
         auto stuck = computeStuck(d, wins);
-        if (stuck.empty()) label("No deaths recorded yet.", FONT2, 0.9f, SOFT, {16.f, h - 74.f}, 0.f, T0);
+        if (stuck.empty()) label("no deaths recorded yet", FONT2, 0.9f, SOFT, {16.f, h - 64.f}, 0.f, at(0.2f));
         for (size_t i = 0; i < stuck.size(); i++) {
-            auto& s = stuck[i];
-            float y = h - 74.f - 28.f * (float)i;
-            float dl = T0 + 0.08f * (float)i;
-            auto c = s.lowData ? ccColor4F{0.6f, 0.7f, 0.8f, 1.f} : chanceColor(s.pass);
-            label(fmt::format("#{}  {}-{}%", i + 1, s.lo, s.hi), FONT, 0.38f, col3(c), {16.f, y}, 0.f, dl);
-            std::string info = s.lowData
-                ? fmt::format("{} deaths  |  low data", s.deaths)
-                : fmt::format("{} deaths  |  pass ~{}%  |  ~{:.1f} tries", s.deaths, (int)std::lround(s.pass * 100.f), s.tries);
-            label(info, FONT2, 0.8f, SOFT, {16.f, y - 13.f}, 0.f, dl);
-            hbar(140.f, y - 3.f, 100.f, 6.f, {1.f, 1.f, 1.f, 0.08f}, dl);
-            hbar(140.f, y - 3.f, 100.f * (s.lowData ? 0.f : s.pass), 6.f, c, dl);
+            auto& st = stuck[i];
+            float y = h - 64.f - 28.f * (float)i;
+            float dl = at(0.2f + 0.1f * (float)i);
+            auto c = st.lowData ? ccColor4F{0.6f, 0.7f, 0.8f, 1.f} : chanceColor(st.pass);
+            fillRect(deco, 8.f, y - 17.f, 248.f, y + 9.f, {1.f, 1.f, 1.f, 0.04f}, 0.f, {0.f, 0.f, 0.f, 0.f});
+            label(fmt::format("[#{}] {}-{}%", i + 1, st.lo, st.hi), FONT, 0.36f, col3(c), {14.f, y}, 0.f, dl);
+            std::string info = st.lowData
+                ? fmt::format("deaths={}  pass=?? (low data)", st.deaths)
+                : fmt::format("deaths={}  pass~{}%  tries~{:.1f}", st.deaths, (int)std::lround(st.pass * 100.f), st.tries);
+            label(info, FONT2, 0.8f, SOFT, {14.f, y - 12.f}, 0.f, dl);
+            hbar(150.f, y - 3.f, 90.f, 6.f, {1.f, 1.f, 1.f, 0.07f}, dl);
+            hbar(150.f, y - 3.f, 90.f * (st.lowData ? 0.f : st.pass), 6.f, soft(c, 0.7f), dl);
         }
 
         // gamemodes
-        label("BY GAMEMODE", FONT, 0.36f, CYAN, {270.f, h - 50.f}, 0.f, T0);
+        label("$ analyze --modes", FONT2, 0.9f, GREEN, {270.f, h - 40.f}, 0.f, at(0.1f));
         std::vector<int> mi(8);
         std::iota(mi.begin(), mi.end(), 0);
         std::sort(mi.begin(), mi.end(), [&](int a, int b) { return modes[a] > modes[b]; });
@@ -252,15 +333,16 @@ protected:
         int shown = 0;
         for (int m : mi) {
             if (modes[m] <= 0 || shown >= 4) break;
-            float y = h - 74.f - 28.f * (float)shown;
-            float dl = T0 + 0.08f * (float)shown;
+            float y = h - 64.f - 28.f * (float)shown;
+            float dl = at(0.2f + 0.1f * (float)shown);
             auto c = heatColor(modes[m], mmax);
-            label(MODES[m], FONT, 0.38f, col3(c), {270.f, y}, 0.f, dl);
-            hbar(330.f, y - 3.f, 70.f * modes[m] / (float)mmax, 6.f, c, dl);
-            label(std::to_string(modes[m]), FONT2, 0.9f, SOFT, {w - 16.f, y}, 1.f, dl);
+            fillRect(deco, 262.f, y - 17.f, w - 8.f, y + 9.f, {1.f, 1.f, 1.f, 0.04f}, 0.f, {0.f, 0.f, 0.f, 0.f});
+            label(MODES[m], FONT, 0.36f, col3(c), {270.f, y}, 0.f, dl);
+            hbar(335.f, y - 3.f, 60.f * modes[m] / (float)mmax, 6.f, soft(c, 0.7f), dl);
+            label("x" + std::to_string(modes[m]), FONT2, 0.9f, SOFT, {w - 14.f, y}, 1.f, dl);
             shown++;
         }
-        if (!shown) label("No mode data yet", FONT2, 0.9f, SOFT, {270.f, h - 74.f}, 0.f, T0);
+        if (!shown) label("no mode data yet", FONT2, 0.9f, SOFT, {270.f, h - 64.f}, 0.f, at(0.2f));
 
         // difficulty histogram across all levels
         std::map<std::string, int> tierDeaths;
@@ -275,14 +357,14 @@ protected:
         }
         int tmax = 1;
         for (auto& kv : tierDeaths) tmax = std::max(tmax, kv.second);
-        label("ALL LEVELS BY DIFFICULTY", FONT, 0.3f, CYAN, {16.f, 78.f}, 0.f, T0);
+        label("$ analyze --difficulty --all-levels", FONT2, 0.9f, GREEN, {16.f, 84.f}, 0.f, at(0.6f));
         for (int t = 0; t < 7; t++) {
             int n = tierDeaths.count(TIERS[t]) ? tierDeaths[TIERS[t]] : 0;
             float cx = 44.f + 58.f * (float)t;
             float bh = 24.f * (float)n / (float)tmax;
-            float dl = T0 + 0.05f * (float)t;
-            vbar(cx - 13.f, 26.f, 26.f, bh, heatColor(n, tmax), dl);
-            label(std::to_string(n), FONT, 0.28f, {255, 255, 255}, {cx, 26.f + std::max(bh, 2.f) + 7.f}, 0.5f, dl);
+            float dl = at(0.65f + 0.05f * (float)t);
+            vbar(cx - 13.f, 28.f, 26.f, bh, soft(heatColor(n, tmax), 0.7f), dl);
+            label(std::to_string(n), FONT2, 0.8f, {255, 255, 255}, {cx, 28.f + std::max(bh, 2.f) + 7.f}, 0.5f, dl);
             label(TIERS[t], FONT2, 0.7f, tier == TIERS[t] ? CYAN : SOFT, {cx, 14.f}, 0.5f, dl);
         }
         return true;
