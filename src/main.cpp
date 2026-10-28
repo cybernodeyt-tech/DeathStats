@@ -113,9 +113,9 @@ static std::vector<Stuck> computeStuck(const std::array<int, 101>& d, int wins) 
     std::vector<int> picked;
     for (int p : idx) {
         if (d[p] <= 0 || out.size() >= 4) break;
-        bool near = false;
-        for (int q : picked) if (std::abs(q - p) <= 2) near = true;
-        if (near) continue;
+        bool tooClose = false;
+        for (int q : picked) if (std::abs(q - p) <= 2) tooClose = true;
+        if (tooClose) continue;
         picked.push_back(p);
         float pass = 1.f;
         int zone = 0;
